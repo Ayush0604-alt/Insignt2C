@@ -25,7 +25,7 @@ app.use(express.urlencoded({
     extended:true,
 }));
 
-// Frontend
+// Frontend Static Files
 app.use(
 
     express.static(
@@ -36,6 +36,20 @@ app.use(
         )
     )
 );
+
+// Main Frontend Route
+app.get("/", (req, res) => {
+
+    res.sendFile(
+
+        path.join(
+
+            __dirname,
+
+            "../frontend/pages/upload.html"
+        )
+    );
+});
 
 // Generated Charts
 app.use(
@@ -79,7 +93,7 @@ app.use(
     )
 );
 
-// Routes
+// API Routes
 app.use(
     "/api/upload-file",
     fileRoutes
@@ -94,13 +108,5 @@ app.use(
     "/api/columns",
     columnRoutes
 );
-
-// Home Route
-app.get("/", (req, res) => {
-
-    res.send(
-        "InsightForge API Running"
-    );
-});
 
 module.exports = app;
