@@ -8,7 +8,7 @@ const generateSummary = (
 
         const pythonProcess = spawn(
 
-            "C:/Users/ayush/OneDrive/Desktop/Diagram/venv/Scripts/python.exe",
+            "python",
 
             [
                 "../python/analysis/dataset_summary.py",

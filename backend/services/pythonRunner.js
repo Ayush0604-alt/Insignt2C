@@ -52,7 +52,7 @@ const runPythonScript = (
         // Run Python
         const pythonProcess = spawn(
 
-            "C:/Users/ayush/OneDrive/Desktop/Diagram/venv/Scripts/python.exe",
+            "python",
 
             [
                 scriptPath,
