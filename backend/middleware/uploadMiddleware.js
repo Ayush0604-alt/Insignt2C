@@ -2,6 +2,24 @@ const multer = require("multer");
 
 const path = require("path");
 
+const fs = require("fs");
+
+// Upload folder
+const uploadPath = path.join(
+
+    __dirname,
+
+    "../uploads"
+);
+
+// Create uploads folder if missing
+if (!fs.existsSync(uploadPath)) {
+
+    fs.mkdirSync(uploadPath, {
+        recursive:true
+    });
+}
+
 // Storage
 const storage = multer.diskStorage({
 
@@ -9,7 +27,7 @@ const storage = multer.diskStorage({
 
         cb(
             null,
-            "uploads/"
+            uploadPath
         );
     },
 
@@ -73,7 +91,6 @@ const fileFilter = (
     }
 };
 
-// Upload middleware
 const upload = multer({
 
     storage,
