@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>InsightForge</title>
+
+    <link
+        rel="stylesheet"
+        href="../css/upload.css"
+    >
+
+</head>
+
+<body>
+
+    <div class="container">
+
+        <!-- Hero -->
+        <div class="hero-section">
+
+            <h1>
+               Insight2C
+            </h1>
+
+            <p>
+                Analytics Dashboard
+            </p>
+
+        </div>
+        <!-- Main Layout -->
+        <div class="top-layout">
+
+            <!-- Sidebar -->
+            <div class="sidebar">
+
+                <!-- Upload -->
+                <div class="dashboard-card">
+
+                    <h2>
+                        Upload Dataset
+                    </h2>
+
+                    <input
+                        type="file"
+                        id="fileInput"
+
+                         accept=".csv,.xlsx,.json"
+                    >
+
+                    <button
+                        id="uploadDatasetBtn"
+                        type="button"
+                    >
+                        Upload Dataset
+                    </button>
+
+                    <!-- Upload Status -->
+                    <p id="uploadStatus"></p>
+
+                </div>
+
+                <!-- Chart Config -->
+                <div class="dashboard-card">
+
+                    <h2>
+                        Chart Configuration
+                    </h2>
+                      
+                    <!-- Chart Type -->
+                    <label>
+                        Chart Type
+                    </label>
+
+                    <select id="chartType">
+
+                        <option value="histogram">
+                            Histogram
+                        </option>
+
+                        <option value="bar">
+                            Bar Chart
+                        </option>
+
+                        <option value="pie">
+                            Pie Chart
+                        </option>
+
+                        <option value="scatter">
+                            Scatter Plot
+                        </option>
+
+                        <option value="heatmap">
+                            Heatmap
+                        </option>
+
+                    </select>
+                    <!-- Chart Color -->
+
+<label>
+    Chart Color
+</label>
+
+<select id="chartColor">
+
+    <option value="orange">
+        Orange
+    </option>
+
+    <option value="blue">
+        Blue
+    </option>
+
+    <option value="green">
+        Green
+    </option>
+
+    <option value="red">
+        Red
+    </option>
+
+</select>
+
+<!-- Histogram Bins -->
+
+<div id="binsContainer">
+
+    <label>
+        Histogram Bins
+    </label>
+
+    <input
+        type="number"
+        id="binsInput"
+        value="20"
+        min="5"
+        max="100"
+    >
+
+</div>
+
+                    <!-- X -->
+                    <div id="xColumnContainer">
+
+                        <label>
+                            X Column
+                        </label>
+
+                        <select id="xColumn"></select>
+
+                    </div>
+
+                    <!-- Y -->
+                    <div id="yColumnContainer">
+
+                        <label>
+                            Y Column
+                        </label>
+
+                        <select id="yColumn"></select>
+
+                    </div>
+
+                    <!-- Heatmap Note -->
+                    <p
+                        id="heatmapInfo"
+                        class="hidden"
+                    >
+
+                        Heatmap automatically
+                        uses all numeric columns
+
+                    </p>
+
+                </div>
+
+                <!-- Cleaning -->
+                <div class="dashboard-card">
+
+                    <h2>
+                        Data Cleaning
+                    </h2>
+
+                    <div class="cleaning-option">
+
+                        <input
+                            type="checkbox"
+                            id="removeDuplicates"
+                        >
+
+                        <label>
+                            Remove Duplicates
+                        </label>
+
+                    </div>
+
+                    <div class="cleaning-option">
+
+                        <input
+                            type="checkbox"
+                            id="dropMissing"
+                        >
+
+                        <label>
+                            Drop Missing Rows
+                        </label>
+
+                    </div>
+
+                    <!-- Missing Strategy -->
+                    <label>
+                        Missing Value Handling
+                    </label>
+
+                    <select id="missingStrategy">
+
+                        <option value="">
+                            Select Strategy
+                        </option>
+
+                        <option value="mean">
+                            Fill Mean
+                        </option>
+
+                        <option value="median">
+                            Fill Median
+                        </option>
+
+                        <option value="mode">
+                            Fill Mode
+                        </option>
+
+                    </select>
+
+                    <!-- Buttons -->
+                    <div class="button-group">
+
+                        <button
+                            id="generateChartBtn"
+                            type="button"
+                        >
+                            Generate Chart
+                        </button>
+
+                        <button
+                            id="addChartBtn"
+                            type="button"
+                        >
+                        
+                        </button>
+
+                    </div>
+
+                    <!-- Message -->
+                    <p id="message"></p>
+
+                </div>
+
+            </div>
+
+            <!-- Main Content -->
+            <div class="main-content">
+
+                <!-- Chart -->
+                <div
+                    class="dashboard-card"
+                    id="chartSection"
+                >
+
+                    <div
+                        id="emptyChartState"
+                    >
+
+                        <h3>
+                            No Chart Generated
+                        </h3>
+
+                        <p>
+                            Upload dataset and
+                            generate a chart
+                        </p>
+
+                    </div>
+
+                    <img
+                        id="chartImage"
+                        class="main-chart hidden"
+                    >
+
+                    <!-- Downloads -->
+                    <div
+                        class="button-group hidden"
+                        id="downloadSection"
+                    >
+
+                        <a
+                            id="downloadChartBtn"
+                            download
+                        >
+
+                            <button type="button">
+
+                                Download Chart
+
+                            </button>
+
+                        </a>
+
+                        <a
+                            id="downloadDatasetBtn"
+                            download
+                        >
+
+                            <button type="button">
+
+                                Download Cleaned Dataset
+
+                            </button>
+
+                        </a>
+
+                    </div>
+
+                </div>
+
+                <!-- Summary -->
+                <div
+                    id="summaryBox"
+                    class="hidden"
+                ></div>
+
+            </div>
+
+        </div>
+
+        <!-- Dashboard -->
+        <div
+            class="dashboard-card hidden"
+            id="dashboardSection"
+        >
+
+           
+
+            <div
+                id="dashboardContainer"
+                class="dashboard-grid"
+            ></div>
+
+        </div>
+
+    </div>
+
+    <!-- JS -->
+    <script src="../js/upload.js"></script>
+
+</body>
+
+</html>
