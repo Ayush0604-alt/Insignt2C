@@ -105,7 +105,7 @@ res.status(200).json({
 
     cleanedFileUrl:
 
-`http://${window.location.origin}/cleaned_data/${cleanedFilename}`,
+`${req.protocol}://${req.get("host")}/cleaned_data/${cleanedFilename}`,
 
     imageUrl:
 
