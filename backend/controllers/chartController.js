@@ -1,129 +1,78 @@
-const runPythonScript =
-    require("../services/pythonRunner");
+const runPythonScript     = require("../services/pythonRunner");
+const generateSummary     = require("../services/summaryService");
+const generateCleaningReport = require("../services/cleaningService");
+const cleanDataset        = require("../services/datasetCleaningService");
+const generateInsights    = require("../services/insightService");
+const path                = require("path");
 
-const generateSummary =
-    require("../services/summaryService");
-
-const generateCleaningReport =
-    require("../services/cleaningService");
- const cleanDataset =
-    require(
-        "../services/datasetCleaningService"
-    );
-const generateInsights =
-    require(
-        "../services/insightService"
-    );
-const path = require("path");
-
-const generateChart =
-    async (req, res) => {
-
+const generateChart = async (req, res) => {
     try {
-
         const {
-
             filePath,
-
             chartType,
-
             xColumn,
-
             yColumn,
-
-           removeDuplicates,
-
-           dropMissing,
-
-           missingStrategy,
-
+            removeDuplicates,
+            dropMissing,
+            missingStrategy,
+            chartColor,
+            bins,
         } = req.body;
-        let finalFilePath =
-    filePath;
 
-// Cleaning options
-finalFilePath =
+        // Basic validation
+        if (!filePath) {
+            return res.status(400).json({ message: "No file path provided" });
+        }
 
-    await cleanDataset(
+        if (!chartType) {
+            return res.status(400).json({ message: "No chart type provided" });
+        }
 
-        filePath,
+        // Step 1: Clean dataset
+        const finalFilePath = await cleanDataset(
+            filePath,
+            removeDuplicates,
+            dropMissing,
+            missingStrategy
+        );
 
-        removeDuplicates,
+        // Step 2: Generate chart — now passes color + bins
+        const filename = await runPythonScript(
+            finalFilePath,
+            chartType,
+            xColumn,
+            yColumn,
+            chartColor || "orange",
+            bins || 20
+        );
 
-        dropMissing,
+        // Step 3: Generate summary (run in parallel with cleaning report + insights)
+        const [summary, cleaningReport, insights] = await Promise.all([
+            generateSummary(finalFilePath),
+            generateCleaningReport(filePath),
+            generateInsights(finalFilePath),
+        ]);
 
-        missingStrategy
-    );
+        const cleanedFilename = path.basename(finalFilePath);
+        const baseUrl = `${req.protocol}://${req.get("host")}`;
 
-        // Generate chart
-        const filename =
-            await runPythonScript(
-
-                finalFilePath,
-
-                chartType,
-
-                xColumn,
-
-                yColumn
-            );
-
-        // Summary
-        const summary =
-            await generateSummary(
-                finalFilePath,
-            );
-
-        // Cleaning report
-        const cleaningReport =
-            await generateCleaningReport(
-                filePath
-            );
-
-            const insights =
-    await generateInsights(
-        finalFilePath
-    );
-
-
-          
-
-   const cleanedFilename =
-    path.basename(
-        finalFilePath
-    );
-res.status(200).json({
-
-    message:
-        "Chart generated successfully",
-
-    summary,
-
-    cleaningReport,
-
-    insights,
-
-    cleanedFileUrl:
-
-`${req.protocol}://${req.get("host")}/cleaned_data/${cleanedFilename}`,
-
-    imageUrl:
-
-`${req.protocol}://${req.get("host")}/generated_charts/${filename}`,
-});
+        res.status(200).json({
+            message:        "Chart generated successfully",
+            summary,
+            cleaningReport,
+            insights,
+            cleanedFileUrl: `${baseUrl}/cleaned_data/${cleanedFilename}`,
+            imageUrl:       `${baseUrl}/generated_charts/${filename}`,
+        });
 
     } catch (error) {
+        console.error("[chartController] Error:", error);
 
-        console.log(error);
+        const message =
+            error instanceof Error ? error.message : String(error);
 
-        res.status(500).json({
-
-            message:
-                error.toString(),
-        });
+        res.status(500).json({ message });
     }
 };
 
-module.exports = {
-    generateChart,
-};
+module.exports = { generateChart };

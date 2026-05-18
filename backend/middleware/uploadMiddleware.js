@@ -1,101 +1,41 @@
 const multer = require("multer");
+const path   = require("path");
+const fs     = require("fs");
 
-const path = require("path");
+const UPLOAD_PATH    = path.join(__dirname, "../uploads");
+const ALLOWED_TYPES  = [".csv", ".xlsx", ".json"];
+const MAX_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
 
-const fs = require("fs");
-
-// Upload folder
-const uploadPath = path.join(
-
-    __dirname,
-
-    "../uploads"
-);
-
-// Create uploads folder if missing
-if (!fs.existsSync(uploadPath)) {
-
-    fs.mkdirSync(uploadPath, {
-        recursive:true
-    });
+// Ensure uploads folder exists
+if (!fs.existsSync(UPLOAD_PATH)) {
+    fs.mkdirSync(UPLOAD_PATH, { recursive: true });
 }
 
-// Storage
 const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, UPLOAD_PATH),
 
-    destination:(req,file,cb)=>{
-
-        cb(
-            null,
-            uploadPath
-        );
+    filename: (req, file, cb) => {
+        // Sanitize original filename, keep extension
+        const ext      = path.extname(file.originalname).toLowerCase();
+        const safeName = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`;
+        cb(null, safeName);
     },
-
-    filename:(req,file,cb)=>{
-
-        cb(
-
-            null,
-
-            Date.now() +
-
-            path.extname(
-                file.originalname
-            )
-        );
-    }
 });
 
-// File validation
-const fileFilter = (
+const fileFilter = (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
 
-    req,
-
-    file,
-
-    cb
-) => {
-
-    const allowedTypes = [
-
-        ".csv",
-
-        ".xlsx",
-
-        ".json"
-    ];
-
-    const ext = path.extname(
-
-        file.originalname
-    ).toLowerCase();
-
-    if(
-
-        allowedTypes.includes(ext)
-    ){
-
-        cb(null,true);
-
-    }else{
-
-        cb(
-
-            new Error(
-
-"Only CSV, XLSX and JSON files allowed"
-            ),
-
-            false
-        );
+    if (ALLOWED_TYPES.includes(ext)) {
+        cb(null, true);
+    } else {
+        cb(new Error(`Only ${ALLOWED_TYPES.join(", ")} files are allowed`), false);
     }
 };
 
 const upload = multer({
-
     storage,
-
-    fileFilter
+    fileFilter,
+    limits: { fileSize: MAX_SIZE_BYTES },
 });
 
 module.exports = upload;

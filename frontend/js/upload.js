@@ -1,714 +1,452 @@
-let uploadedFilePath = "";
+/* ─────────────────────────────────────────────────────────────
+   Insight2C — upload.js
+   Handles: upload, chart generation, UI state, history
+───────────────────────────────────────────────────────────── */
 
-let datasetColumns = {};
+// ── State ──────────────────────────────────────────────────
+const state = {
+    filePath:   "",
+    columns:    { numeric_columns: [], categorical_columns: [] },
+    chartColor: "orange",
+    history:    [],   // { imageUrl, label, time }
+};
 
+// ── DOM refs ───────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
 
+const els = {
+    fileInput:        $("fileInput"),
+    fileName:         $("fileName"),
+    fileInfo:         $("fileInfo"),
+    dropZone:         $("dropZone"),
+    uploadBtn:        $("uploadDatasetBtn"),
+    uploadStatus:     $("uploadStatus"),
+    configCard:       $("configCard"),
+    cleanCard:        $("cleanCard"),
+    chartType:        $("chartType"),
+    chartColor:       $("chartColor"),
+    binsContainer:    $("binsContainer"),
+    binsInput:        $("binsInput"),
+    binsValue:        $("binsValue"),
+    xColumnContainer: $("xColumnContainer"),
+    yColumnContainer: $("yColumnContainer"),
+    xColumn:          $("xColumn"),
+    yColumn:          $("yColumn"),
+    heatmapInfo:      $("heatmapInfo"),
+    generateBtn:      $("generateChartBtn"),
+    message:          $("message"),
+    emptyState:       $("emptyChartState"),
+    chartDisplay:     $("chartDisplay"),
+    chartImage:       $("chartImage"),
+    chartTitle:       $("chartTitle"),
+    downloadChartBtn: $("downloadChartBtn"),
+    downloadDataset:  $("downloadDatasetBtn"),
+    statsRow:         $("statsRow"),
+    statRows:         $("statRows"),
+    statCols:         $("statCols"),
+    statDups:         $("statDups"),
+    statMissing:      $("statMissing"),
+    analyticsRow:     $("analyticsRow"),
+    cleaningReport:   $("cleaningReportContent"),
+    insightsList:     $("insightsList"),
+    recBanner:        $("recommendationsBanner"),
+    recChips:         $("recChips"),
+    historyCard:      $("historyCard"),
+    historyGrid:      $("historyGrid"),
+    clearHistoryBtn:  $("clearHistoryBtn"),
+    headerStatus:     $("headerStatus"),
+};
 
-// Elements
-const uploadBtn =
-    document.getElementById(
-        "uploadDatasetBtn"
-    );
+// ── Init ───────────────────────────────────────────────────
+function init() {
+    setupDragDrop();
+    setupColorPicker();
+    setupBinsSlider();
 
-const generateBtn =
-    document.getElementById(
-        "generateChartBtn"
-    );
+    els.fileInput.addEventListener("change", onFileSelected);
+    els.uploadBtn.addEventListener("click", uploadDataset);
+    els.generateBtn.addEventListener("click", generateChart);
+    els.chartType.addEventListener("change", updateColumnDropdowns);
+    els.clearHistoryBtn.addEventListener("click", clearHistory);
+}
 
-const addChartBtn =
-    document.getElementById(
-        "addChartBtn"
-    );
+// ── Drag & Drop ────────────────────────────────────────────
+function setupDragDrop() {
+    const zone = els.dropZone;
 
-// Event Listeners
-uploadBtn.addEventListener(
-    "click",
-    uploadDataset
-);
+    zone.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        zone.classList.add("drag-over");
+    });
 
-generateBtn.addEventListener(
-    "click",
-    generateChart
-);
+    zone.addEventListener("dragleave", () => {
+        zone.classList.remove("drag-over");
+    });
 
-addChartBtn.addEventListener(
-    "click",
-    addDashboardChart
-);
+    zone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        zone.classList.remove("drag-over");
+        const file = e.dataTransfer.files[0];
+        if (file) {
+            els.fileInput.files = e.dataTransfer.files;
+            onFileSelected();
+        }
+    });
 
-document
-    .getElementById(
-        "chartType"
-    )
-    .addEventListener(
-        "change",
-        updateColumnDropdowns
-    );
+    zone.addEventListener("click", (e) => {
+        if (e.target.classList.contains("btn-outline") || e.target === zone) return;
+        els.fileInput.click();
+    });
+}
 
-// Upload Dataset
+// ── File Selected ──────────────────────────────────────────
+function onFileSelected() {
+    const file = els.fileInput.files[0];
+    if (!file) return;
+    els.fileName.textContent = file.name;
+    els.fileInfo.classList.remove("hidden");
+}
+
+// ── Color Picker ───────────────────────────────────────────
+function setupColorPicker() {
+    document.querySelectorAll(".color-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            document.querySelectorAll(".color-btn").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            state.chartColor = btn.dataset.color;
+            els.chartColor.value = btn.dataset.color;
+        });
+    });
+}
+
+// ── Bins Slider ────────────────────────────────────────────
+function setupBinsSlider() {
+    els.binsInput.addEventListener("input", () => {
+        els.binsValue.textContent = els.binsInput.value;
+    });
+}
+
+// ── Status Helpers ─────────────────────────────────────────
+function setStatus(el, message, type = "") {
+    el.textContent = message;
+    el.className = "status-msg" + (type ? ` ${type}` : "");
+}
+
+function setHeaderStatus(text, loading = false) {
+    const dot = els.headerStatus.querySelector(".status-dot");
+    els.headerStatus.querySelector("span:last-child").textContent = text;
+    dot.className = "status-dot" + (loading ? " loading" : "");
+}
+
+function setButtonLoading(btn, loading) {
+    const text    = btn.querySelector(".btn-text");
+    const spinner = btn.querySelector(".btn-spinner");
+    if (loading) {
+        text.textContent = "Working…";
+        spinner.classList.remove("hidden");
+        btn.classList.add("loading");
+    } else {
+        spinner.classList.add("hidden");
+        btn.classList.remove("loading");
+    }
+}
+
+// ── Upload Dataset ─────────────────────────────────────────
 async function uploadDataset() {
+    const file = els.fileInput.files[0];
 
-    const fileInput =
-        document.getElementById(
-            "fileInput"
-        );
-
-    const uploadStatus =
-        document.getElementById(
-            "uploadStatus"
-        );
-
-    if (!fileInput.files[0]) {
-
-        uploadStatus.innerText =
-            "Please select a dataset";
-
+    if (!file) {
+        setStatus(els.uploadStatus, "Please select a dataset file.", "error");
         return;
     }
 
-    const formData =
-        new FormData();
+    const formData = new FormData();
+    formData.append("file", file);
 
-    formData.append(
-        "file",
-        fileInput.files[0]
-    );
+    setButtonLoading(els.uploadBtn, true);
+    setStatus(els.uploadStatus, "Uploading…");
+    setHeaderStatus("Uploading…", true);
 
     try {
+        const res  = await fetch(`${window.location.origin}/api/upload-file`, {
+            method: "POST",
+            body:   formData,
+        });
+        const data = await res.json();
 
-        uploadStatus.innerText =
-            "Uploading dataset...";
+        if (!res.ok) throw new Error(data.message);
 
-        const response =
-            await fetch(
+        state.filePath = data.filePath;
+        state.columns  = data.columns;
 
-`${window.location.origin}/api/upload-file`,
+        // Enable config + clean cards
+        els.configCard.classList.add("enabled");
+        els.cleanCard.classList.add("enabled");
 
-                {
-                    method:"POST",
-                    body:formData,
-                }
-            );
-
-        const data =
-            await response.json();
-
-        if (!response.ok) {
-
-            throw new Error(
-                data.message
-            );
-        }
-
-        uploadedFilePath =
-            data.filePath;
-
-        datasetColumns =
-            data.columns;
-
+        // Populate dropdowns
         updateColumnDropdowns();
 
-        uploadStatus.innerText =
-            "Dataset uploaded successfully";
+        // Show recommendations if returned
+        if (data.recommendations?.length) {
+            showRecommendations(data.recommendations);
+        }
 
-    } catch(error){
+        setStatus(els.uploadStatus, `Uploaded: ${file.name}`, "success");
+        setHeaderStatus("Ready");
 
-        console.log(error);
+        // Update upload btn text
+        els.uploadBtn.querySelector(".btn-text").textContent = "Re-upload";
 
-        uploadStatus.innerText =
-            error.message;
+    } catch (err) {
+        console.error(err);
+        setStatus(els.uploadStatus, `Error: ${err.message}`, "error");
+        setHeaderStatus("Error");
+    } finally {
+        setButtonLoading(els.uploadBtn, false);
     }
 }
 
-// Update Dropdowns
+// ── Column Dropdowns ───────────────────────────────────────
 function updateColumnDropdowns() {
+    const chartType = els.chartType.value;
+    const { numeric_columns = [], categorical_columns = [] } = state.columns;
 
-    const chartType =
-        document.getElementById(
-            "chartType"
-        ).value;
+    els.xColumn.innerHTML = "";
+    els.yColumn.innerHTML = "";
 
-    const xColumn =
-        document.getElementById(
-            "xColumn"
-        );
+    // Reset visibility
+    els.xColumnContainer.classList.remove("hidden");
+    els.yColumnContainer.classList.remove("hidden");
+    els.binsContainer.classList.remove("hidden");
+    els.heatmapInfo.classList.add("hidden");
 
-    const yColumn =
-        document.getElementById(
-            "yColumn"
-        );
-
-    const xContainer =
-        document.getElementById(
-            "xColumnContainer"
-        );
-
-    const yContainer =
-        document.getElementById(
-            "yColumnContainer"
-        );
-
-    const heatmapInfo =
-        document.getElementById(
-            "heatmapInfo"
-        );
-
-        const binsContainer =
-
-    document.getElementById(
-        "binsContainer"
-    );
-
-    xColumn.innerHTML = "";
-
-    yColumn.innerHTML = "";
-
-    heatmapInfo.classList.add(
-        "hidden"
-    );
-
-    // Histogram
-    if(chartType === "histogram"){
-
-
-        binsContainer.style.display =
-    "block";
-        yContainer.style.display =
-            "none";
-
-        xContainer.style.display =
-            "block";
-
-        datasetColumns.numeric_columns
-            ?.forEach((col)=>{
-
-                const option =
-                    document.createElement(
-                        "option"
-                    );
-
-                option.value = col;
-
-                option.textContent = col;
-
-                xColumn.appendChild(
-                    option
-                );
-            });
-    }
-
-    // Pie
-    else if(chartType === "pie"){
-
-        yContainer.style.display =
-            "none";
-
-        xContainer.style.display =
-            "block";
-binsContainer.style.display =
-    "none";
-        datasetColumns.categorical_columns
-            ?.forEach((col)=>{
-
-                const option =
-                    document.createElement(
-                        "option"
-                    );
-
-                option.value = col;
-
-                option.textContent = col;
-
-                xColumn.appendChild(
-                    option
-                );
-            });
-    }
-
-    // Scatter
-    else if(chartType === "scatter"){
-
-        yContainer.style.display =
-            "block";
-
-        xContainer.style.display =
-            "block";
-            binsContainer.style.display =
-    "none";
-
-        datasetColumns.numeric_columns
-            ?.forEach((col)=>{
-
-                const option1 =
-                    document.createElement(
-                        "option"
-                    );
-
-                option1.value = col;
-
-                option1.textContent = col;
-
-                xColumn.appendChild(
-                    option1
-                );
-
-                const option2 =
-                    document.createElement(
-                        "option"
-                    );
-
-                option2.value = col;
-
-                option2.textContent = col;
-
-                yColumn.appendChild(
-                    option2
-                );
-            });
-    }
-
-    // Bar
-   // Bar
-else if(chartType === "bar"){
-
-    yContainer.style.display =
-        "block";
-
-    xContainer.style.display =
-        "block";
-binsContainer.style.display =
-    "none";
-    datasetColumns
-        .categorical_columns
-        .filter(
-
-            (col)=>
-
-                !col
-                .toLowerCase()
-                .includes("id")
-        )
-
-        .forEach((col)=>{
-
-            const option =
-                document.createElement(
-                    "option"
-                );
-
-            option.value = col;
-
-            option.textContent = col;
-
-            xColumn.appendChild(
-                option
-            );
+    const addOptions = (select, cols) => {
+        cols.forEach((col) => {
+            const opt = document.createElement("option");
+            opt.value = col;
+            opt.textContent = col;
+            select.appendChild(opt);
         });
+    };
 
-    datasetColumns.numeric_columns
-        ?.forEach((col)=>{
+    switch (chartType) {
+        case "histogram":
+            els.yColumnContainer.classList.add("hidden");
+            addOptions(els.xColumn, numeric_columns);
+            break;
 
-            const option =
-                document.createElement(
-                    "option"
-                );
+        case "pie":
+            els.yColumnContainer.classList.add("hidden");
+            els.binsContainer.classList.add("hidden");
+            addOptions(els.xColumn, categorical_columns);
+            break;
 
-            option.value = col;
+        case "scatter":
+            els.binsContainer.classList.add("hidden");
+            addOptions(els.xColumn, numeric_columns);
+            addOptions(els.yColumn, numeric_columns);
+            // Default Y to second column if available
+            if (els.yColumn.options.length > 1) {
+                els.yColumn.selectedIndex = 1;
+            }
+            break;
 
-            option.textContent = col;
-
-            yColumn.appendChild(
-                option
+        case "bar":
+            els.binsContainer.classList.add("hidden");
+            addOptions(
+                els.xColumn,
+                categorical_columns.filter(c => !c.toLowerCase().includes("id"))
             );
-        });
-}
+            addOptions(els.yColumn, numeric_columns);
+            break;
 
-    // Heatmap
-    else if(chartType === "heatmap"){
-
-        xContainer.style.display =
-            "none";
-
-        yContainer.style.display =
-            "none";
-
-            binsContainer.style.display =
-    "none";
-
-        heatmapInfo.classList.remove(
-            "hidden"
-        );
+        case "heatmap":
+            els.xColumnContainer.classList.add("hidden");
+            els.yColumnContainer.classList.add("hidden");
+            els.binsContainer.classList.add("hidden");
+            els.heatmapInfo.classList.remove("hidden");
+            break;
     }
 }
 
-// Validation
-function validateChartSelection(
+// ── Recommendations ────────────────────────────────────────
+function showRecommendations(recs) {
+    els.recChips.innerHTML = "";
+    recs.forEach(({ chart, reason }) => {
+        const chip = document.createElement("button");
+        chip.className = "rec-chip";
+        chip.textContent = chartLabel(chart);
+        chip.title = reason;
+        chip.addEventListener("click", () => {
+            els.chartType.value = chart;
+            updateColumnDropdowns();
+            // Scroll sidebar to chart config
+            document.getElementById("configCard").scrollIntoView({ behavior: "smooth" });
+        });
+        els.recChips.appendChild(chip);
+    });
+    els.recBanner.classList.remove("hidden");
+}
 
-    chartType,
+function chartLabel(type) {
+    return { histogram: "Histogram", bar: "Bar Chart", pie: "Pie Chart", scatter: "Scatter Plot", heatmap: "Heatmap" }[type] || type;
+}
 
-    xColumn,
+// ── Validate chart selection ───────────────────────────────
+function validateChartSelection(chartType, xColumn, yColumn) {
+    const { numeric_columns = [] } = state.columns;
 
-    yColumn
-){
-
-    if(
-        chartType === "pie"
-    ){
-
-        if(
-            xColumn
-            .toLowerCase()
-            .includes("id")
-        ){
-
-            return
-"Pie chart not suitable for ID columns";
-        }
+    if (chartType === "pie" && xColumn.toLowerCase().includes("id")) {
+        return "Pie chart is not suitable for ID columns.";
     }
-
-    if(
-        chartType === "scatter"
-    ){
-
-        if(xColumn === yColumn){
-
-            return
-"Scatter plot requires different columns";
-        }
+    if (chartType === "scatter" && xColumn === yColumn) {
+        return "Scatter plot requires two different columns.";
     }
-
-    if(
-        chartType === "heatmap"
-    ){
-
-        if(
-datasetColumns.numeric_columns
-.length < 2
-        ){
-
-            return
-"Heatmap requires multiple numeric columns";
-        }
+    if (chartType === "heatmap" && numeric_columns.length < 2) {
+        return "Heatmap requires at least 2 numeric columns.";
     }
-
     return null;
 }
 
-// Generate Main Chart
-async function generateChart(){
-
-    const chartType =
-        document.getElementById(
-            "chartType"
-        ).value;
-
-    const xColumn =
-        document.getElementById(
-            "xColumn"
-        ).value;
-
-    const yColumn =
-        document.getElementById(
-            "yColumn"
-        ).value;
-
-    const removeDuplicates =
-        document.getElementById(
-            "removeDuplicates"
-        ).checked;
-
-    const dropMissing =
-        document.getElementById(
-            "dropMissing"
-        ).checked;
-
-    const missingStrategy =
-        document.getElementById(
-            "missingStrategy"
-        ).value;
-
-    const chartImage =
-        document.getElementById(
-            "chartImage"
-        );
-
-    const summaryBox =
-        document.getElementById(
-            "summaryBox"
-        );
-
-    const message =
-        document.getElementById(
-            "message"
-        );
-  const chartColor =
-
-    document.getElementById(
-        "chartColor"
-    ).value;
-
-const bins =
-
-    document.getElementById(
-        "binsInput"
-    ).value;
-    const validationError =
-
-        validateChartSelection(
-
-            chartType,
-
-            xColumn,
-
-            yColumn
-        );
-
-    if(validationError){
-
-        message.innerText =
-            validationError;
-
+// ── Generate Chart ─────────────────────────────────────────
+async function generateChart() {
+    if (!state.filePath) {
+        setStatus(els.message, "Please upload a dataset first.", "error");
         return;
     }
 
-    try{
-         if(!uploadedFilePath){
-
-    message.innerText =
-        "Please upload dataset first";
-
-    return;
-}
-        message.innerText =
-            "Generating chart...";
-
-            
-
-        const response =
-            await fetch(
-
-`${window.location.origin}/api/generate-chart`,
-
-                {
-
-                    method:"POST",
-
-                    headers:{
-                        "Content-Type":
-                            "application/json",
-                    },
-
-                    body:JSON.stringify({
-
-                        filePath:
-                            uploadedFilePath,
-
-                        chartType,
-
-                        xColumn,
-
-                        yColumn,
-
-                        removeDuplicates,
-
-                        dropMissing,
-
-                        missingStrategy,
-
-                        chartColor,
-
-                          bins,
-                    }),
-                }
-            );
-
-        const data =
-            await response.json();
-
-        if(!response.ok){
-
-            throw new Error(
-                data.message
-            );
-        }
-
-        // Show Chart
-        chartImage.src =
-
-`${data.imageUrl}?t=${new Date().getTime()}`;
-
-        chartImage.classList.remove(
-            "hidden"
-        );
-        
-       const emptyState =
-
-    document.getElementById(
-        "emptyChartState"
-    );
-
-if(emptyState){
-
-    emptyState.remove();
-}
-
-        document
-            .getElementById(
-                "downloadSection"
-            )
-            .classList.remove(
-                "hidden"
-            );
-
-        // Download links
-        document
-            .getElementById(
-                "downloadChartBtn"
-            ).href =
-                data.imageUrl;
-
-        document
-            .getElementById(
-                "downloadDatasetBtn"
-            ).href =
-                data.cleanedFileUrl;
-
-        // Show summary
-        summaryBox.classList.remove(
-            "hidden"
-        );
-
-        const summary =
-            data.summary;
-
-        const cleaningReport =
-            data.cleaningReport;
-
-        const insights =
-            data.insights;
-
-        summaryBox.innerHTML = `
-
-<div class="summary-grid">
-
-    <div class="stat-card">
-
-        <h3>Total Rows</h3>
-
-        <p>${summary.rows}</p>
-
-    </div>
-
-    <div class="stat-card">
-
-        <h3>Total Columns</h3>
-
-        <p>${summary.columns}</p>
-
-    </div>
-
-    <div class="stat-card">
-
-        <h3>Duplicate Rows</h3>
-
-        <p>${summary.duplicate_rows}</p>
-
-    </div>
-
-</div>
-
-<div class="analytics-layout">
-
-    <div class="analytics-card">
-
-        <h2>
-            Cleaning Report
-        </h2>
-
-        <div class="report-item">
-
-            <span>
-                Duplicate Rows
-            </span>
-
-            <strong>
-
-${cleaningReport.duplicate_rows}
-
-            </strong>
-
-        </div>
-
-        <div class="report-item">
-
-            <span>
-                Empty Columns
-            </span>
-
-            <strong>
-
-${cleaningReport.empty_columns.length}
-
-            </strong>
-
-        </div>
-
-    </div>
-
-    <div class="analytics-card insights-card">
-
-        <h2>
-            AI Insights
-        </h2>
-
-        <ul>
-
-${(insights || []).map(
-
-(item)=>`
-
-<li>${item}</li>
-
-`).join("")}
-
-        </ul>
-
-    </div>
-
-</div>
-`;
-
-        message.innerText =
-            "Chart generated successfully";
-
-            document
-    .getElementById(
-        "downloadDatasetBtn"
-    ).href =
-
-        data.cleanedFileUrl;
-
-    }catch(error){
-
-        console.log(error);
-
-        message.innerText =
-            error.message;
+    const chartType       = els.chartType.value;
+    const xColumn         = els.xColumn.value;
+    const yColumn         = els.yColumn.value;
+    const removeDuplicates = $("removeDuplicates").checked;
+    const dropMissing      = $("dropMissing").checked;
+    const missingStrategy  = $("missingStrategy").value;
+    const chartColor       = state.chartColor;
+    const bins             = els.binsInput.value;
+
+    const validationError = validateChartSelection(chartType, xColumn, yColumn);
+    if (validationError) {
+        setStatus(els.message, validationError, "error");
+        return;
+    }
+
+    setButtonLoading(els.generateBtn, true);
+    setStatus(els.message, "Generating chart…");
+    setHeaderStatus("Generating…", true);
+
+    try {
+        const res  = await fetch(`${window.location.origin}/api/generate-chart`, {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({
+                filePath: state.filePath,
+                chartType,
+                xColumn,
+                yColumn,
+                removeDuplicates,
+                dropMissing,
+                missingStrategy,
+                chartColor,
+                bins,
+            }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.message);
+
+        // ── Render chart ──────────────────────────────────
+        const imageUrl = `${data.imageUrl}?t=${Date.now()}`;
+
+        els.chartImage.src    = imageUrl;
+        els.chartTitle.textContent = `${chartLabel(chartType)} — ${xColumn || "All Columns"}`;
+        els.emptyState.classList.add("hidden");
+        els.chartDisplay.classList.remove("hidden");
+        els.downloadChartBtn.href   = data.imageUrl;
+        els.downloadDataset.href    = data.cleanedFileUrl;
+
+        // ── Stats ─────────────────────────────────────────
+        const s = data.summary;
+        const totalMissing = Object.values(s.missing_values || {}).reduce((a, b) => a + b, 0);
+        els.statRows.textContent    = s.rows.toLocaleString();
+        els.statCols.textContent    = s.columns.toLocaleString();
+        els.statDups.textContent    = s.duplicate_rows.toLocaleString();
+        els.statMissing.textContent = totalMissing.toLocaleString();
+        els.statsRow.classList.remove("hidden");
+
+        // ── Cleaning Report ───────────────────────────────
+        const cr = data.cleaningReport || {};
+        els.cleaningReport.innerHTML = `
+            <div class="report-row"><span>Duplicate Rows</span><strong>${cr.duplicate_rows ?? "—"}</strong></div>
+            <div class="report-row"><span>Empty Columns</span><strong>${(cr.empty_columns || []).length}</strong></div>
+            <div class="report-row"><span>Numeric-String Cols</span><strong>${(cr.numeric_string_columns || []).length}</strong></div>
+            ${Object.entries(cr.missing_values || {}).slice(0, 5).map(
+                ([col, count]) => `<div class="report-row"><span>${col}</span><strong>${count} missing</strong></div>`
+            ).join("")}
+        `;
+
+        // ── Insights ──────────────────────────────────────
+        els.insightsList.innerHTML = (data.insights || [])
+            .map((item, i) => `<li style="animation-delay:${i * 0.05}s">${item}</li>`)
+            .join("");
+
+        els.analyticsRow.classList.remove("hidden");
+
+        // ── History ───────────────────────────────────────
+        addToHistory(imageUrl, `${chartType} · ${xColumn || "auto"}`);
+
+        setStatus(els.message, "Chart generated successfully", "success");
+        setHeaderStatus("Done");
+
+    } catch (err) {
+        console.error(err);
+        setStatus(els.message, `Error: ${err.message}`, "error");
+        setHeaderStatus("Error");
+    } finally {
+        setButtonLoading(els.generateBtn, false);
+        // Reset generate button label
+        els.generateBtn.querySelector(".btn-text").textContent = "Generate Chart";
     }
 }
 
-// Add Dashboard Chart
-function addDashboardChart(){
+// ── Chart History ──────────────────────────────────────────
+function addToHistory(imageUrl, label) {
+    state.history.unshift({ imageUrl, label, time: Date.now() });
 
-    document
-        .getElementById(
-            "dashboardSection"
-        )
-        .classList.remove(
-            "hidden"
-        );
+    // Keep max 12
+    if (state.history.length > 12) state.history.pop();
 
-    alert(
-"Will Add Multiple Charts in future"
-    );
+    renderHistory();
+    els.historyCard.classList.remove("hidden");
 }
+
+function renderHistory() {
+    els.historyGrid.innerHTML = state.history.map((item, i) => `
+        <div class="history-item" onclick="loadHistoryItem(${i})" title="${item.label}">
+            <img src="${item.imageUrl}" alt="${item.label}" loading="lazy">
+            <div class="history-item-label">${item.label}</div>
+        </div>
+    `).join("");
+}
+
+function loadHistoryItem(index) {
+    const item = state.history[index];
+    if (!item) return;
+    els.chartImage.src = item.imageUrl;
+    els.chartTitle.textContent = item.label;
+    els.emptyState.classList.add("hidden");
+    els.chartDisplay.classList.remove("hidden");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+// Expose to inline handlers
+window.loadHistoryItem = loadHistoryItem;
+
+function clearHistory() {
+    state.history = [];
+    els.historyGrid.innerHTML = "";
+    els.historyCard.classList.add("hidden");
+}
+
+// ── Boot ───────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", init);

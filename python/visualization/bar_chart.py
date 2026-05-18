@@ -7,187 +7,116 @@ import time
 
 # Arguments
 file_path = sys.argv[1]
-
-x_column = str(
-    sys.argv[2]
-).strip()
+x_column = str(sys.argv[2]).strip()
+y_column = str(sys.argv[3]).strip() if len(sys.argv) > 3 else ""
 
 # Default customization
 chart_color = "orange"
 
-bins = 20
-
-# Read optional color
-if len(sys.argv) > 3:
-
-    temp_color = str(
-        sys.argv[3]
-    ).strip().lower()
-
-    if temp_color != "":
-
-        chart_color = temp_color
-
-# Read optional bins
 if len(sys.argv) > 4:
-
-    try:
-
-        bins = int(
-            sys.argv[4]
-        )
-
-    except:
-
-        bins = 20
+    temp_color = str(sys.argv[4]).strip().lower()
+    if temp_color != "":
+        chart_color = temp_color
 
 # Supported colors
 color_map = {
-
     "orange": "#ea580c",
-
     "blue": "#2563eb",
-
     "green": "#16a34a",
-
     "red": "#dc2626",
-
     "purple": "#9333ea",
-
     "black": "#111827",
-
     "pink": "#db2777",
-
     "yellow": "#ca8a04",
-
     "brown": "#92400e",
-
     "gray": "#4b5563"
 }
 
-# Fallback color
 if chart_color not in color_map:
-
     chart_color = "orange"
 
-final_color = color_map[
-    chart_color
-]
+final_color = color_map[chart_color]
 
 # Read dataset
 if file_path.endswith(".csv"):
-
     df = pd.read_csv(file_path)
-
 elif file_path.endswith(".xlsx"):
-
     df = pd.read_excel(file_path)
-
 elif file_path.endswith(".json"):
-
     df = pd.read_json(file_path)
-
 else:
-
     print("Unsupported file format")
+    sys.exit(1)
 
-    sys.exit()
+# Clean column names
+def clean_col(col):
+    return col.replace("[","").replace("]","").replace("'","").replace('"',"").strip()
 
-# Clean malformed column names
-x_column = x_column.replace(
-    "[",
-    ""
-).replace(
-    "]",
-    ""
-).replace(
-    "'",
-    ""
-).replace(
-    '"',
-    ""
-).strip()
+x_column = clean_col(x_column)
+y_column = clean_col(y_column)
 
 # Validation
 if x_column not in df.columns:
+    print(f"Error: Invalid X column '{x_column}'")
+    sys.exit(1)
 
-    print("Invalid column")
-
-    sys.exit()
-
-# Handle duplicate columns safely
+# Safely get columns
 x_data = df.loc[:, x_column]
-
 if isinstance(x_data, pd.DataFrame):
-
     x_data = x_data.iloc[:, 0]
 
-# Convert numeric
-x_data = pd.to_numeric(
+# If y_column provided and valid, do grouped bar
+if y_column and y_column in df.columns:
+    y_data = df.loc[:, y_column]
+    if isinstance(y_data, pd.DataFrame):
+        y_data = y_data.iloc[:, 0]
 
-    x_data,
+    y_data = pd.to_numeric(y_data, errors="coerce")
 
-    errors="coerce"
-)
+    plot_df = pd.DataFrame({x_column: x_data, y_column: y_data}).dropna()
 
-# Remove invalid rows
-x_data = x_data.dropna()
+    if plot_df.empty:
+        print("Error: No valid data after cleaning")
+        sys.exit(1)
 
-# Empty validation
-if x_data.empty:
+    # Aggregate: mean of y per x category (top 15 categories)
+    agg = plot_df.groupby(x_column)[y_column].mean().nlargest(15).reset_index()
 
-    print("No valid numeric data")
+    plt.figure(figsize=(12, 6))
+    sns.barplot(data=agg, x=x_column, y=y_column, color=final_color)
+    plt.title(f"Average {y_column} by {x_column}")
+    plt.xlabel(x_column)
+    plt.ylabel(f"Mean {y_column}")
+    plt.xticks(rotation=45, ha="right")
 
-    sys.exit()
+else:
+    # Count bar chart for categorical column
+    counts = x_data.value_counts().head(15)
 
-# Plot
-plt.figure(figsize=(10,6))
+    if counts.empty:
+        print("Error: No valid categorical data")
+        sys.exit(1)
 
-sns.histplot(
+    plt.figure(figsize=(12, 6))
+    sns.barplot(x=counts.index.astype(str), y=counts.values, color=final_color)
+    plt.title(f"Value Counts of {x_column}")
+    plt.xlabel(x_column)
+    plt.ylabel("Count")
+    plt.xticks(rotation=45, ha="right")
 
-    x_data,
-
-    kde=True,
-
-    bins=bins,
-
-    color=final_color
-)
-
-plt.title(
-    f"Distribution of {x_column}"
-)
-
-plt.xlabel(x_column)
-
-plt.ylabel("Frequency")
-
-# Filename
+# Save
 timestamp = int(time.time())
-
 filename = f"chart_{timestamp}.png"
 
-# Save path
 current_dir = os.path.dirname(__file__)
-
 save_path = os.path.abspath(
-
-    os.path.join(
-
-        current_dir,
-
-        "../../backend/generated_charts",
-
-        filename
-    )
+    os.path.join(current_dir, "../../backend/generated_charts", filename)
 )
 
-# Save chart
+os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
 plt.tight_layout()
-
-plt.savefig(save_path)
-
+plt.savefig(save_path, dpi=150)
 plt.close()
 
-# Return filename
 print(filename)
